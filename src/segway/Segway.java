@@ -1,32 +1,31 @@
 package segway;
 
-import java.util.Queue;
-
-import lejos.nxt.BasicMotor;
 import lejos.nxt.LCD;
-import lejos.nxt.Motor;
 import lejos.nxt.MotorPort;
 import lejos.nxt.NXTMotor;
-import lejos.nxt.NXTRegulatedMotor;
 import lejos.nxt.SensorPort;
 import lejos.nxt.addon.AccelHTSensor;
 import lejos.nxt.addon.GyroSensor;
 import lejos.robotics.EncoderMotor;
-import lejos.robotics.navigation.Segoway;
 
 public class Segway {
-	final static double MOVING_AVERAGE_PERCENTAGE = 0.6;
-	
+	static final double MOVING_AVERAGE_PERCENTAGE = 0.9;
+	static final int AVG_SAMPLES = 20;
+
 	AccelHTSensor as = new AccelHTSensor(SensorPort.S1);
-	GyroSensor gs = new GyroSensor(SensorPort.S4);
+	GyroSensor gs = new GyroSensor(SensorPort.S3);
 	EncoderMotor mr = new NXTMotor(MotorPort.A); // + back
 	EncoderMotor ml = new NXTMotor(MotorPort.C); // + back
 
-	float gyroOffset;
-	//Queue<Float> gyroVals = new Queue<>();
+	double gyroOffset;
 	double gyroLast;
-	
+
 	public void run() {
+		mr.setPower(0);
+		ml.setPower(0);
+		mr.forward();
+		ml.forward();
+
 		// wait for horizontal position
 		if (as.getYAccel() > -180)
 			System.out.println("Wrong position");
@@ -36,26 +35,20 @@ public class Segway {
 		Utils.sleep(500);
 
 		// find gyro offset
-		float sum = 0;
-		for (int i = 0; i < 10; i++) {
+		double sum = 0;
+		for (int i = 0; i < AVG_SAMPLES; i++) {
 			sum += gs.getAngularVelocity();
+			Utils.sleep(100);
 		}
-		gyroOffset = sum / 10;
+		gyroOffset = sum / AVG_SAMPLES;
+		System.out.println("Offset: " + gyroOffset);
 		gyroLast = gyroOffset;
-
+		
 		System.out.println("Ready");
+		while (as.getXAccel() < 190) { Utils.sleep(50); }
 
-		while (as.getXAccel() < 180) {
-			Utils.sleep(50);
-		}
-
-		PID pid = new PID(5, 0, 0, 0);
+		PID pid = new PID(10, 0.1, 0.1, 0);
 		long t1 = System.currentTimeMillis();
-
-        mr.setPower(0);
-        ml.setPower(0);
-        mr.forward();
-        ml.forward();
 
 		int x;
 		double vel;
@@ -73,14 +66,14 @@ public class Segway {
 			setMotors((float) change);
 
 			if (System.currentTimeMillis() - tUpdate > 250) {
-				// LCD.clear();
-				// LCD.drawString(Integer.toString(x), 1, 1);
-				// LCD.drawString(Double.toString(vel), 1, 2);
+				LCD.clear();
+				LCD.drawString(Integer.toString(x), 1, 1);
+				LCD.drawString(Double.toString(vel), 1, 2);
 				LCD.drawString(Double.toString(change), 1, 3);
-				LCD.drawString(""+System.currentTimeMillis(), 1, 4);
+				LCD.drawString("" + System.currentTimeMillis(), 1, 4);
 				tUpdate = System.currentTimeMillis();
 			}
-			
+
 			t1 = t2;
 			Utils.sleep(1);
 		}
@@ -88,21 +81,23 @@ public class Segway {
 
 	public double getGyroVal() {
 		gyroLast = gyroLast * MOVING_AVERAGE_PERCENTAGE + gs.getAngularVelocity() * (1 - MOVING_AVERAGE_PERCENTAGE);
+		//gyroLast = (100 * gyroLast + gs.getAngularVelocity()) / 101;
 		return gyroLast - gyroOffset; // + back
 	}
 
-	public void setMotors(float mrls) {
-		setMotors(mrls, mrls);
+	public void setMotors(double mrls) {
+		setMotors(mrls + 10*Math.sin(System.currentTimeMillis()/100),
+				mrls + 10*Math.sin(System.currentTimeMillis()/100 + Math.PI));
 	}
 
-	public void setMotors(float mrs, float mls) {
+	public void setMotors(double mrs, double mls) {
 		mr.setPower((int) Math.abs(mrs));
 		if (mrs < 0) {
 			mr.backward();
 		} else if (mrs > 0) {
 			mr.forward();
 		}
-		
+
 		ml.setPower((int) Math.abs(mls));
 		if (mls < 0) {
 			ml.backward();
