@@ -11,6 +11,7 @@ import lejos.robotics.EncoderMotor;
 public class Segway {
 	static final double MOVING_AVERAGE_PERCENTAGE = 0.9;
 	static final int AVG_SAMPLES = 20;
+	static final double CORRECT_ANGLE = 85;
 
 	AccelHTSensor as = new AccelHTSensor(SensorPort.S1);
 	GyroSensor gs = new GyroSensor(SensorPort.S3);
@@ -19,6 +20,7 @@ public class Segway {
 
 	double gyroOffset;
 	double gyroLast;
+	double avgChange = 0;
 
 	public void run() {
 		mr.setPower(0);
@@ -51,30 +53,38 @@ public class Segway {
 		PID pid = new PID(10, 0, 0, 0);
 		long t1 = System.currentTimeMillis();
 
-		int x;
+		int x, y;
 		double vel;
+		x = as.getXAccel();
+		y = as.getYAccel();
+		double angle = Math.toDegrees(Math.atan2(x, y));
 		long t2;
 		double change;
 		long tUpdate = System.currentTimeMillis();
 		while (true) {
 			x = as.getXAccel(); // + down
-			// int y = as.getYAccel(); // + front
+			y = as.getYAccel(); // + front
 			// int z = as.getZAccel(); // + robot left
+			//y = Math.Math.sqrt(200*200 - x*x);
+			double angle2 = Math.toDegrees(Math.atan2(x, y));
+			double angleChange = getAngleChange(angle2 - angle); // - front
 
-			vel = getGyroVal();
+			vel = getGyroVal(); // - front
 			t2 = System.currentTimeMillis();
 			change = -pid.step(t2 - t1, vel);
-			setMotors((float) change);
+			//setMotors((float) change);
 
 			if (System.currentTimeMillis() - tUpdate > 250) {
 				LCD.clear();
 				LCD.drawString(Integer.toString(x), 1, 1);
 				LCD.drawString(Double.toString(vel), 1, 2);
 				LCD.drawString(Double.toString(change), 1, 3);
-				LCD.drawString("" + System.currentTimeMillis(), 1, 4);
+				LCD.drawString(Double.toString(angle2), 1, 4);
+				LCD.drawString("" + System.currentTimeMillis(), 1, 5);
 				tUpdate = System.currentTimeMillis();
 			}
 
+			angle = angle2;
 			t1 = t2;
 			Utils.sleep(1);
 		}
@@ -84,6 +94,11 @@ public class Segway {
 		gyroLast = gyroLast * MOVING_AVERAGE_PERCENTAGE + gs.getAngularVelocity() * (1 - MOVING_AVERAGE_PERCENTAGE);
 		//gyroLast = (100 * gyroLast + gs.getAngularVelocity()) / 101;
 		return gyroLast - gyroOffset; // + back
+	}
+
+	public double getAngleChange(double change) {
+		avgChange = avgChange * MOVING_AVERAGE_PERCENTAGE + change * (1 - MOVING_AVERAGE_PERCENTAGE);
+		return avgChange;
 	}
 
 	public void setMotors(double mrls) {
