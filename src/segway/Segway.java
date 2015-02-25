@@ -37,6 +37,7 @@ public class Segway {
 		// find gyro offset
 		double sum = 0;
 		for (int i = 0; i < AVG_SAMPLES; i++) {
+			setMotors(0);
 			sum += gs.getAngularVelocity();
 			Utils.sleep(100);
 		}
@@ -45,9 +46,9 @@ public class Segway {
 		gyroLast = gyroOffset;
 		
 		System.out.println("Ready");
-		while (as.getXAccel() < 190) { Utils.sleep(50); }
+		while (as.getXAccel() < 205) { Utils.sleep(50); }
 
-		PID pid = new PID(10, 0.1, 0.1, 0);
+		PID pid = new PID(10, 0, 0, 0);
 		long t1 = System.currentTimeMillis();
 
 		int x;
@@ -86,8 +87,9 @@ public class Segway {
 	}
 
 	public void setMotors(double mrls) {
-		setMotors(mrls + 10*Math.sin(System.currentTimeMillis()/100),
-				mrls + 10*Math.sin(System.currentTimeMillis()/100 + Math.PI));
+		setMotors(mrls + 5*Math.sin(System.currentTimeMillis()/100),
+				mrls + 5*Math.sin(System.currentTimeMillis()/100 + Math.PI));
+		//setMotors(mrls, mrls);
 	}
 
 	public void setMotors(double mrs, double mls) {
