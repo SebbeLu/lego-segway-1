@@ -6,6 +6,7 @@ import lejos.nxt.NXTMotor;
 import lejos.nxt.SensorPort;
 import lejos.nxt.addon.AccelHTSensor;
 import lejos.nxt.addon.GyroSensor;
+import lejos.nxt.addon.OpticalDistanceSensor;
 import lejos.robotics.EncoderMotor;
 
 public class Segway {
@@ -20,6 +21,8 @@ public class Segway {
 
 	double gyroOffset;
 	double gyroLast;
+	double xLast;
+	double yLast;
 	double avgChange = 0;
 
 	public void run() {
@@ -50,41 +53,56 @@ public class Segway {
 		System.out.println("Ready");
 		while (as.getXAccel() < 205) { Utils.sleep(50); }
 
-		PID pid = new PID(10, 0, 0, 0);
+		PID pid = new PID(10000, 100, 0, 0);
 		long t1 = System.currentTimeMillis();
 
-		int x, y;
-		double vel;
-		x = as.getXAccel();
-		y = as.getYAccel();
-		double angle = Math.toDegrees(Math.atan2(x, y));
+		xLast = as.getXAccel();
+		yLast = as.getYAccel();
+		double anglePrev = Math.toDegrees(Math.atan2(xLast, yLast));
 		long t2;
 		double change;
 		long tUpdate = System.currentTimeMillis();
 		while (true) {
-			x = as.getXAccel(); // + down
-			y = as.getYAccel(); // + front
-			// int z = as.getZAccel(); // + robot left
-			//y = Math.Math.sqrt(200*200 - x*x);
-			double angle2 = Math.toDegrees(Math.atan2(x, y));
-			double angleChange = getAngleChange(angle2 - angle); // - front
-
-			vel = getGyroVal(); // - front
 			t2 = System.currentTimeMillis();
-			change = -pid.step(t2 - t1, vel);
-			//setMotors((float) change);
+			// x = as.getXAccel(); // + down
+			// y = as.getYAccel(); // + front
+			// int z = as.getZAccel(); // + robot left
+			updateAccel();
+			double angleCurr = Math.toDegrees(Math.atan2(xLast, yLast));
+			double changeFromOptimal;
+			if (angleCurr > CORRECT_ANGLE && CORRECT_ANGLE > anglePrev) {
+				changeFromOptimal = CORRECT_ANGLE - angleCurr;
+			} else if (angleCurr < CORRECT_ANGLE && CORRECT_ANGLE < anglePrev) {
+				changeFromOptimal = angleCurr - CORRECT_ANGLE;
+			} else {
+				changeFromOptimal = Math.abs(angleCurr - anglePrev);
+				double dc = Math.abs(CORRECT_ANGLE - angleCurr);
+				double dp = Math.abs(CORRECT_ANGLE - anglePrev);
+				if (dc > dp) {
+					changeFromOptimal *= -1;
+				}
+			}
+			changeFromOptimal *= (double) (t2 - t1) / 1000;			
+			//double angleChange = (angleCurr - anglePrev) / (t2 - t1) * 1000; // - front 
+
+			double vel = getGyroVal(); // - front
+			//change = -pid.step(t2 - t1, vel);
+			change = pid.step(t2 - t1, changeFromOptimal) * Math.signum(vel);
+			setMotors((float) change);
 
 			if (System.currentTimeMillis() - tUpdate > 250) {
 				LCD.clear();
-				LCD.drawString(Integer.toString(x), 1, 1);
-				LCD.drawString(Double.toString(vel), 1, 2);
-				LCD.drawString(Double.toString(change), 1, 3);
-				LCD.drawString(Double.toString(angle2), 1, 4);
-				LCD.drawString("" + System.currentTimeMillis(), 1, 5);
+				LCD.drawString("x  " + xLast, 1, 1);
+				LCD.drawString("v  " + vel, 1, 2);
+				LCD.drawString("c  " + change, 1, 3);
+				LCD.drawString("a  " + angleCurr, 1, 4);
+				LCD.drawString("co " + changeFromOptimal, 1, 5);
+				//LCD.drawString("d  " + (vel - angleChange), 1, 6);
+				LCD.drawString("" + System.currentTimeMillis(), 1, 7);
 				tUpdate = System.currentTimeMillis();
 			}
 
-			angle = angle2;
+			anglePrev = angleCurr;
 			t1 = t2;
 			Utils.sleep(1);
 		}
@@ -95,16 +113,24 @@ public class Segway {
 		//gyroLast = (100 * gyroLast + gs.getAngularVelocity()) / 101;
 		return gyroLast - gyroOffset; // + back
 	}
-
-	public double getAngleChange(double change) {
-		avgChange = avgChange * MOVING_AVERAGE_PERCENTAGE + change * (1 - MOVING_AVERAGE_PERCENTAGE);
-		return avgChange;
+	
+	public void updateAccel() {
+		xLast = xLast * MOVING_AVERAGE_PERCENTAGE + as.getXAccel() * (1 - MOVING_AVERAGE_PERCENTAGE);
+		yLast = yLast * MOVING_AVERAGE_PERCENTAGE + as.getYAccel() * (1 - MOVING_AVERAGE_PERCENTAGE);
 	}
+
+	/*public double getAngleChange(double change) {
+		//avgChange = avgChange * MOVING_AVERAGE_PERCENTAGE + change * (1 - MOVING_AVERAGE_PERCENTAGE);
+		//avgChange = (avgChange + change) / 2;
+		
+		System.out.println((int)((avgChange + change) / 2)+" "+change+" "+(avgChange+change));
+		return avgChange;
+	}*/
 
 	public void setMotors(double mrls) {
 		setMotors(mrls + 5*Math.sin(System.currentTimeMillis()/100),
 				mrls + 5*Math.sin(System.currentTimeMillis()/100 + Math.PI));
-		//setMotors(mrls, mrls);
+		setMotors(mrls, mrls);
 	}
 
 	public void setMotors(double mrs, double mls) {
@@ -114,7 +140,7 @@ public class Segway {
 		} else if (mrs > 0) {
 			mr.forward();
 		}
-
+ 
 		ml.setPower((int) Math.abs(mls));
 		if (mls < 0) {
 			ml.backward();
