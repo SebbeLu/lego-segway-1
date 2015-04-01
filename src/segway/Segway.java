@@ -57,7 +57,7 @@ public class Segway {
 		//while (as.getXAccel() < 205) { Utils.sleep(50); }
 		Button.waitForAnyPress();
 
-		PID pid = new PID(10, 0.001, 0, 0); // *** P I D ***
+		PID pid = new PID(20, 0, 0, 0); // *** P I D ***
 		long t1 = System.currentTimeMillis();
 
 		accelX = as.getXAccel();
@@ -87,10 +87,10 @@ public class Segway {
 			change = pid.step(t2 - t1, toPid);
 			setMotors((float) change);
 			
-			if (System.currentTimeMillis() - tUpdate > 250) {
+			/*if (System.currentTimeMillis() - tUpdate > 250) {
 				LCD.clear();
-				/*LCD.drawString("x  " + accelX, 1, 1);
-				LCD.drawString("v  " + gyroVel, 1, 2);*/
+				LCD.drawString("x  " + accelX, 1, 1);
+				LCD.drawString("v  " + gyroVel, 1, 2);
 				LCD.drawString("c  " + change, 1, 1);
 				LCD.drawString("an " + angleCurr, 1, 2);
 				LCD.drawString("co " + accelChangeFromOptimal, 1, 3);
@@ -98,11 +98,11 @@ public class Segway {
 				LCD.drawString("to " + toPid, 1, 5);
 				LCD.drawString("" + System.currentTimeMillis(), 1, 7);
 				tUpdate = System.currentTimeMillis();
-			}
+			}*/
 
 			anglePrev = angleCurr;
 			t1 = t2;
-			Utils.sleep(10);
+			Utils.sleep(1);
 		}
 	}
 	
@@ -134,8 +134,8 @@ public class Segway {
 	}
 
 	public void setMotors(double mrls) {
-		setMotors(mrls + 18*Math.sin(System.currentTimeMillis()/(double)40),
-				mrls + 18*Math.sin(System.currentTimeMillis()/(double)40 + Math.PI));
+		setMotors(mrls + 18*Math.sin(System.currentTimeMillis()/(double)50),
+				mrls + 18*Math.sin(System.currentTimeMillis()/(double)50 + Math.PI));
 	}
 
 	public void setMotors(double mrs, double mls) {
