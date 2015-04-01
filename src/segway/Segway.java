@@ -11,7 +11,7 @@ import lejos.nxt.addon.OpticalDistanceSensor;
 import lejos.robotics.EncoderMotor;
 
 public class Segway {
-	static final double MOVING_AVERAGE_PERCENTAGE = 0.9;
+	static final double MOVING_AVERAGE_PERCENTAGE = 0.95;
 	static final int AVG_SAMPLES = 20;
 	static final double CORRECT_ANGLE = 85 - 90;
 
@@ -50,13 +50,14 @@ public class Segway {
 		gyroOffset = sum / AVG_SAMPLES;
 		System.out.println("Offset: " + gyroOffset);
 		gyroVel = 0;
+		setMotors(0, 0);
 		
 		// start
 		System.out.println("Ready");
 		//while (as.getXAccel() < 205) { Utils.sleep(50); }
 		Button.waitForAnyPress();
 
-		PID pid = new PID(10, 0, 0, 0);
+		PID pid = new PID(10, 0.001, 0, 0); // *** P I D ***
 		long t1 = System.currentTimeMillis();
 
 		accelX = as.getXAccel();
@@ -67,38 +68,41 @@ public class Segway {
 		long tUpdate = System.currentTimeMillis();
 		while (true) {
 			t2 = System.currentTimeMillis();
+			// set motors: + front
 			// x = as.getXAccel(); // + down
 			// y = as.getYAccel(); // + front
 			// int z = as.getZAccel(); // + robot left
 			// gyroVel - front
 			updateAccel();
 			updateGyroVel();
+			
 			double angleCurr = Math.toDegrees(Math.atan2(accelX, accelY)) - 90; // front: -
-			double accelChangeFromOptimal = getChangeFromOptimalAccel(angleCurr) * (t2 - t1) / 1000;
-
+			double accelChangeFromOptimal = getChangeFromOptimalAccel(angleCurr) * (t2 - t1) / 1000; // better +
+			
 			double toPid = 0;
-			double offset = Math.abs(CORRECT_ANGLE - angleCurr);
 			
-			toPid = angleCurr * offset + gyroVel * (90 - offset);
+			double coef = (Math.cos(Math.toRadians(angleCurr) * 2) + 1) / 2;
+			toPid = /*-angleCurr * (1-coef)*/ + 200 * Math.signum(angleCurr) * accelChangeFromOptimal * coef;
 			
-			change = pid.step(t2 - t1, 0);
+			change = pid.step(t2 - t1, toPid);
 			setMotors((float) change);
-
+			
 			if (System.currentTimeMillis() - tUpdate > 250) {
 				LCD.clear();
-				LCD.drawString("x  " + accelX, 1, 1);
-				LCD.drawString("v  " + gyroVel, 1, 2);
-				LCD.drawString("c  " + change, 1, 3);
-				LCD.drawString("an " + angleCurr, 1, 4);
-				LCD.drawString("co " + accelChangeFromOptimal, 1, 5);
-				//LCD.drawString("d  " + (vel - angleChange), 1, 6);
+				/*LCD.drawString("x  " + accelX, 1, 1);
+				LCD.drawString("v  " + gyroVel, 1, 2);*/
+				LCD.drawString("c  " + change, 1, 1);
+				LCD.drawString("an " + angleCurr, 1, 2);
+				LCD.drawString("co " + accelChangeFromOptimal, 1, 3);
+				LCD.drawString("c  " + coef, 1, 4);
+				LCD.drawString("to " + toPid, 1, 5);
 				LCD.drawString("" + System.currentTimeMillis(), 1, 7);
 				tUpdate = System.currentTimeMillis();
 			}
 
 			anglePrev = angleCurr;
 			t1 = t2;
-			Utils.sleep(1);
+			Utils.sleep(10);
 		}
 	}
 	
