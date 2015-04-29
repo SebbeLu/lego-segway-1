@@ -11,9 +11,10 @@ import lejos.nxt.addon.OpticalDistanceSensor;
 import lejos.robotics.EncoderMotor;
 
 public class Segway {
-	static final double MOVING_AVERAGE_PERCENTAGE = 0.95;
+	static final double MOVING_AVG_PERCENTAGE_GYRO = 0.95;
+	static final double MOVING_AVG_PERCENTAGE_ACCEL = 0.5;
 	static final int AVG_SAMPLES = 20;
-	static final double CORRECT_ANGLE = 85 - 90;
+	static final double CORRECT_ANGLE = -5;
 
 	AccelHTSensor as = new AccelHTSensor(SensorPort.S1);
 	GyroSensor gs = new GyroSensor(SensorPort.S3);
@@ -57,7 +58,10 @@ public class Segway {
 		//while (as.getXAccel() < 205) { Utils.sleep(50); }
 		Button.waitForAnyPress();
 
-		PID pid = new PID(20, 0, 0, 0); // *** P I D ***
+		//http://www.raysforexcellence.se/wp-content/uploads/2013/01/Dennis-Jin-Development-of-a-stable-control-system-for-a-segway.pdf
+		//http://www.chrismarion.net/index.php?option=com_content&view=article&id=122:the-segway-theory&catid=44:robotics
+		
+		PID pid = new PID(10, 0.01, 1, 0); // *** P I D ***
 		long t1 = System.currentTimeMillis();
 
 		accelX = as.getXAccel();
@@ -67,38 +71,50 @@ public class Segway {
 		double change;
 		long tUpdate = System.currentTimeMillis();
 		while (true) {
+			if (Button.readButtons() == Button.ID_ENTER) {
+				pid.reset();
+				setMotors(0, 0);
+				Utils.sleep(1000);
+				t1 = System.currentTimeMillis();
+			}
 			t2 = System.currentTimeMillis();
-			// set motors: + front
+			// set motors: - front
 			// x = as.getXAccel(); // + down
 			// y = as.getYAccel(); // + front
 			// int z = as.getZAccel(); // + robot left
-			// gyroVel - front
+			// gyroVel: - front
 			updateAccel();
 			updateGyroVel();
 			
+			// accel is SLOOOOOOW !!!!
 			double angleCurr = Math.toDegrees(Math.atan2(accelX, accelY)) - 90; // front: -
 			double accelChangeFromOptimal = getChangeFromOptimalAccel(angleCurr) * (t2 - t1) / 1000; // better +
 			
 			double toPid = 0;
 			
 			double coef = (Math.cos(Math.toRadians(angleCurr) * 2) + 1) / 2;
-			toPid = /*-angleCurr * (1-coef)*/ + 200 * Math.signum(angleCurr) * accelChangeFromOptimal * coef;
+			double direction = Math.signum(angleCurr + CORRECT_ANGLE);
+			toPid = gyroVel;
+			//toPid = /*-angleCurr * (1-coef) +*/ 50 * direction * accelChangeFromOptimal /** coef*/;
+			//toPid = 50 * direction * accelChangeFromOptimal;
 			
-			change = pid.step(t2 - t1, toPid);
-			setMotors((float) change);
+			change = -pid.step(t2 - t1, toPid);
 			
-			/*if (System.currentTimeMillis() - tUpdate > 250) {
+			if (Button.readButtons() == Button.ID_ESCAPE) setMotors(0, 0);
+			else setMotors((float) change);
+			
+			if (System.currentTimeMillis() - tUpdate > 250) {
 				LCD.clear();
-				LCD.drawString("x  " + accelX, 1, 1);
+				LCD.drawString("y  " + accelY, 1, 1);
 				LCD.drawString("v  " + gyroVel, 1, 2);
-				LCD.drawString("c  " + change, 1, 1);
-				LCD.drawString("an " + angleCurr, 1, 2);
-				LCD.drawString("co " + accelChangeFromOptimal, 1, 3);
-				LCD.drawString("c  " + coef, 1, 4);
-				LCD.drawString("to " + toPid, 1, 5);
+				LCD.drawString("an " + angleCurr, 1, 3);
+				//LCD.drawString("co " + accelChangeFromOptimal, 1, 3);
+				//LCD.drawString("c  " + coef, 1, 4);
+				LCD.drawString("to " + toPid, 1, 4);
+				LCD.drawString("c  " + change, 1, 5);
 				LCD.drawString("" + System.currentTimeMillis(), 1, 7);
 				tUpdate = System.currentTimeMillis();
-			}*/
+			}
 
 			anglePrev = angleCurr;
 			t1 = t2;
@@ -124,18 +140,21 @@ public class Segway {
 	}
 
 	public void updateGyroVel() {
-		gyroVel = gyroVel * MOVING_AVERAGE_PERCENTAGE +
-				(gs.getAngularVelocity() - gyroOffset) * (1 - MOVING_AVERAGE_PERCENTAGE);
+		gyroVel = gyroVel * MOVING_AVG_PERCENTAGE_GYRO +
+				(gs.getAngularVelocity() - gyroOffset) * (1 - MOVING_AVG_PERCENTAGE_GYRO);
 	}
 	
 	public void updateAccel() {
-		accelX = accelX * MOVING_AVERAGE_PERCENTAGE + as.getXAccel() * (1 - MOVING_AVERAGE_PERCENTAGE);
-		accelY = accelY * MOVING_AVERAGE_PERCENTAGE + as.getYAccel() * (1 - MOVING_AVERAGE_PERCENTAGE);
+		accelX = accelX * MOVING_AVG_PERCENTAGE_ACCEL + as.getXAccel() * (1 - MOVING_AVG_PERCENTAGE_ACCEL);
+		accelY = accelY * MOVING_AVG_PERCENTAGE_ACCEL + as.getYAccel() * (1 - MOVING_AVG_PERCENTAGE_ACCEL);
+		/*accelX = as.getXAccel();
+		accelY = as.getYAccel();*/
 	}
 
 	public void setMotors(double mrls) {
-		setMotors(mrls + 18*Math.sin(System.currentTimeMillis()/(double)50),
-				mrls + 18*Math.sin(System.currentTimeMillis()/(double)50 + Math.PI));
+		/*setMotors(mrls + 18*Math.sin(System.currentTimeMillis()/(double)50),
+				mrls + 18*Math.sin(System.currentTimeMillis()/(double)50 + Math.PI));*/
+		setMotors(mrls, mrls);
 	}
 
 	public void setMotors(double mrs, double mls) {
